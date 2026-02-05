@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parcel Tracker - DD Herbs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .loader {
+            border: 3px solid #f3f3f3; border-top: 3px solid #dc2626; border-radius: 50%;
+            width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center py-10 px-4">
+
+    <div class="w-full max-w-2xl bg-white rounded-xl shadow-lg overflow-hidden">
+        
+        <div class="bg-red-700 p-6 text-white">
+            <h1 class="text-2xl font-bold">📦 NinjaVan Exception Tracker</h1>
+            <p class="text-red-100 text-sm mt-1">DD Herbs Logistics Tool</p>
+        </div>
+
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Bearer Token</label>
+                <input type="password" id="apiToken" 
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 outline-none transition"
+                       placeholder="Paste your Token here">
+                <p class="text-xs text-gray-400 mt-1">Your Shipper ID (9211894) is configured automatically.</p>
+            </div>
+
+            <button onclick="fetchAndProcess()" id="fetchBtn"
+                    class="w-full bg-red-700 hover:bg-red-800 text-white font-bold py-3 px-4 rounded-lg transition flex justify-center items-center gap-2">
+                <span>Find Stuck Parcels</span>
+            </button>
+            
+            <div id="errorMsg" class="hidden text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-200"></div>
+        </div>
+
+        <div id="resultArea" class="hidden border-t border-gray-100">
+            <div class="p-6 bg-gray-50">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="text-sm font-bold text-gray-700">WhatsApp Report</label>
+                    <span id="countBadge" class="bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-0.5 rounded">0 Issues</span>
+                </div>
+                
+                <textarea id="outputBox" readonly class="w-full h-64 p-4 text-sm font-mono bg-white border border-gray-300 rounded-lg focus:outline-none resize-none text-gray-800"></textarea>
+                
+                <button onclick="copyToClipboard()" 
+                        class="mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition shadow-md flex justify-center items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                    </svg>
+                    Copy for WhatsApp
+                </button>
+            </div>
+        </div>
+        
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const API_URL = "https://walrus.ninjavan.co/global/dash/1.0/orders/search?from=0&size=100&subshippers=true";
+        const SHIPPER_ID = "9211894";
+        const START_TIME = "2025-12-31T16:00:00Z";
+        
+        // These are the statuses we search for AND group by in the report
+        const STATUS_CATEGORIES = [
+            "Pending Pickup",
+            "Van en-route to Pickup",
+            "En-route to Sorting Hub",
+            "Pickup Fail",
+            "Arrived at Sorting Hub",
+            "On Hold",
+            "On Vehicle for Delivery",
+            "Pending Reschedule",
+            "Transferred to 3PL",
+            "Pending Pickup at Distribution Point",
+            "Arrived at Distribution Point"
+        ];
+
+        async function fetchAndProcess() {
+            const token = document.getElementById('apiToken').value.trim();
+            const btn = document.getElementById('fetchBtn');
+            const errorDiv = document.getElementById('errorMsg');
+            const resultArea = document.getElementById('resultArea');
+
+            // Reset UI
+            errorDiv.classList.add('hidden');
+            resultArea.classList.add('hidden');
+            btn.innerHTML = '<div class="loader"></div> Processing...';
+            btn.disabled = true;
+
+            try {
+                if (!token) throw new Error("Please enter your Bearer Token.");
+
+                // 1. PREPARE REQUEST BODY
+                // Dynamic End Time (Now in UTC)
+                const endTime = new Date().toISOString(); 
+
+                const requestBody = {
+                    "required_fields": [],
+                    "search_field": null,
+                    "search_filters": [
+                        {
+                            "field": "granular_status",
+                            "values": STATUS_CATEGORIES
+                        }
+                    ],
+                    "search_range": {
+                        "end_time": endTime,
+                        "field": "created_at",
+                        "start_time": START_TIME
+                    }
+                };
+
+                // 2. FETCH DATA (POST REQUEST)
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'x-nv-shipper-id': SHIPPER_ID,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) throw new Error("Unauthorized: Invalid Token.");
+                    if (response.status === 403) throw new Error("Forbidden: Check Shipper ID or Token permissions.");
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // 3. PROCESS DATA
+                const report = generateReportLogic(data);
+                
+                // 4. DISPLAY RESULTS
+                document.getElementById('outputBox').value = report.text;
+                document.getElementById('countBadge').innerText = `${report.count} Issues Found`;
+                resultArea.classList.remove('hidden');
+
+            } catch (err) {
+                console.error(err);
+                let msg = err.message;
+                // Friendly error for CORS issues which are common with browser-based API calls
+                if (msg === "Failed to fetch") {
+                    msg = "Network Error (CORS). Please ensure you have a CORS extension enabled or the API allows browser access.";
+                }
+                errorDiv.innerText = msg;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.innerHTML = 'Find Stuck Parcels';
+                btn.disabled = false;
+            }
+        }
+
+        function generateReportLogic(data) {
+            let groups = {};
+            STATUS_CATEGORIES.forEach(status => groups[status] = []);
+            let totalIssues = 0;
+
+            const orders = data.search_data || []; 
+
+            orders.forEach(item => {
+                const order = item.order;
+                const status = order.granular_status;
+
+                // Group by status
+                if (groups[status] !== undefined) {
+                    // Clean Name: "Olinda/Olinda/709..." -> "Olinda"
+                    let cleanName = "Unknown";
+                    if (order.to_name) {
+                        cleanName = order.to_name.split('/')[0].trim();
+                    }
+
+                    const entry = `📦 ${order.tracking_id} - ${cleanName}`;
+                    groups[status].push(entry);
+                    totalIssues++;
+                }
+            });
+
+            // Format Output String
+            const now = new Date();
+            const timeStr = `${now.getDate()}/${now.getMonth()+1} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+            
+            let output = `🚨 *UNDELIVERED PARCEL REPORT* - ${timeStr}\n\n`;
+            let hasContent = false;
+
+            STATUS_CATEGORIES.forEach(status => {
+                const items = groups[status];
+                if (items.length > 0) {
+                    hasContent = true;
+                    output += `*${status.toUpperCase()}* (${items.length})\n`;
+                    output += items.join('\n');
+                    output += `\n\n`;
+                }
+            });
+
+            if (!hasContent) output += "✅ All monitored parcels are moving smoothly.";
+
+            return { text: output.trim(), count: totalIssues };
+        }
+
+        function copyToClipboard() {
+            const copyText = document.getElementById("outputBox");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value).then(() => {
+                alert("Report copied to clipboard!");
+            });
+        }
+    </script>
+</body>
+</html>
