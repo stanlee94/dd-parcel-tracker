@@ -134,10 +134,19 @@
         }
 
         function calculateDaysDiff(dateString) {
+            // 1. Create Date objects
             const created = new Date(dateString);
             const now = new Date();
-            const diffTime = Math.abs(now - created);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+            // 2. Reset the time on both to Midnight (00:00:00)
+            // This ensures we are only comparing the DATE part (e.g. Feb 5 vs Feb 2)
+            created.setHours(0, 0, 0, 0);
+            now.setHours(0, 0, 0, 0);
+            
+            // 3. Calculate difference
+            const diffTime = now - created; // Difference in milliseconds
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)); 
+            
             return diffDays;
         }
 
