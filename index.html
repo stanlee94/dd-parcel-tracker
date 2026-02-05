@@ -54,7 +54,6 @@
 
     <script>
         // --- CONFIGURATION ---
-        // UPDATE THIS WITH YOUR WORKER URL
         const API_URL = "https://ninja-proxy.stanlee19941218.workers.dev/"; 
 
         const STATUS_CATEGORIES = [
@@ -139,7 +138,6 @@
             const now = new Date();
 
             // 2. Reset the time on both to Midnight (00:00:00)
-            // This ensures we are only comparing the DATE part (e.g. Feb 5 vs Feb 2)
             created.setHours(0, 0, 0, 0);
             now.setHours(0, 0, 0, 0);
             
@@ -190,17 +188,34 @@
 
             // 3. Render HTML
             let hasContent = false;
-            const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
+            
+            // --- TIME CHANGE: Add Date and use 12-hour format ---
+            const now = new Date();
+            const dateStr = `${now.getDate()}/${now.getMonth() + 1}`;
+            const timeDisplay = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            const finalTimeDisplay = `${dateStr} ${timeDisplay}`;
 
             STATUS_CATEGORIES.forEach(status => {
                 const items = groups[status];
                 if (items.length > 0) {
                     hasContent = true;
                     
-                    // Generate Text Block for this specific category
                     const header = `*${status.toUpperCase()}* (${items.length})`;
-                    const body = items.map(i => i.fullString).join('\n');
-                    const copyText = `${header}\n${body}`;
+                    const bodyForCopy = items.map(i => i.fullString).join('\n');
+                    const copyText = `${header}\n${bodyForCopy}`;
+
+                    // --- COLOR CHANGE: Logic to Red Highlight > 7 Days ---
+                    const visualList = items.map(item => {
+                        const isLate = item.days >= 7;
+                        // Conditional Class: Red & Bold if >= 7, else Gray & Mono
+                        const idClass = isLate ? "text-red-600 font-bold" : "text-gray-500 font-mono";
+                        
+                        return `<div class="flex justify-between text-xs py-1 border-b border-gray-100 last:border-0">
+                                    <span class="${idClass}">${item.id}</span>
+                                    <span class="text-gray-700 truncate ml-2 flex-1">${item.name}</span>
+                                    <span class="text-gray-400 whitespace-nowrap ml-2">(${item.days} days)</span>
+                                </div>`;
+                    }).join('');
 
                     // Create Card HTML
                     const card = document.createElement('div');
@@ -218,7 +233,9 @@
                                 Copy List
                             </button>
                         </div>
-                        <textarea readonly class="w-full text-xs font-mono bg-gray-50 border border-gray-200 rounded p-2 h-32 focus:outline-none resize-y text-gray-700 leading-relaxed">${body}</textarea>
+                        <div class="bg-gray-50 rounded border border-gray-200 p-2 max-h-64 overflow-y-auto">
+                            ${visualList}
+                        </div>
                     `;
                     container.appendChild(card);
                 }
@@ -232,10 +249,10 @@
                     </div>
                 `;
             } else {
-                // Add a "Total" badge at the top
+                // Add a "Total" badge at the top with updated Time Format
                 const badge = document.createElement('div');
                 badge.className = "flex justify-between items-end border-b pb-2 mb-2";
-                badge.innerHTML = `<span class="text-xs text-gray-500">Report generated at ${timeStr}</span> <span class="font-bold text-red-600 text-sm">${totalIssues} Total Issues</span>`;
+                badge.innerHTML = `<span class="text-xs text-gray-500">Report generated at ${finalTimeDisplay}</span> <span class="font-bold text-red-600 text-sm">${totalIssues} Total Issues</span>`;
                 container.prepend(badge);
             }
 
@@ -247,20 +264,18 @@
             const text = decodeURIComponent(btn.getAttribute('data-text'));
             
             navigator.clipboard.writeText(text).then(() => {
-                // Visual Feedback
                 const originalContent = btn.innerHTML;
                 const originalClasses = btn.className;
                 
                 btn.innerHTML = `✅ Copied!`;
                 btn.className = "text-xs font-semibold bg-green-50 text-green-600 px-3 py-1.5 rounded border border-green-200 transition";
                 
-                // Reset after 2 seconds
                 setTimeout(() => {
                     btn.innerHTML = originalContent;
                     btn.className = originalClasses;
                 }, 2000);
             }).catch(err => {
-                alert("Failed to copy. Please copy manually from the box.");
+                alert("Failed to copy. Please copy manually.");
             });
         }
     </script>
