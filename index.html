@@ -100,7 +100,13 @@
 
                 // 1. PREPARE REQUEST BODY
                 // Dynamic End Time (Now in UTC)
-                const endTime = new Date().toISOString(); 
+                // --- REPLACE WITH THIS FIXED CODE ---
+
+                // 1. Get Current Time
+                const now = new Date();
+                // Remove milliseconds: Split at the dot '.' and add 'Z' back
+                const endTime = now.toISOString().split('.')[0] + 'Z';
+                // ----------------------------------------
 
                 const requestBody = {
                     "required_fields": [],
